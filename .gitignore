@@ -1,0 +1,7 @@
+# JetBrains IDE settings
+.idea/
+
+# Go build output
+*.exe
+*.test
+*.out
