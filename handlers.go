@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -45,18 +46,11 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.mu.Lock()
-
-	task := Task{
-		ID:        s.nextID,
-		Title:     input.Title,
-		Completed: false,
+	task, err := s.store.Create(input.Title)
+	if err != nil {
+		serverError(w, err)
+		return
 	}
-
-	s.tasks[task.ID] = task
-	s.nextID++
-
-	s.mu.Unlock()
 
 	w.Header().Set("Location", "/tasks/"+strconv.Itoa(task.ID))
 	writeJSON(w, http.StatusCreated, task)
@@ -64,15 +58,11 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 
 // listTasks handles GET /tasks.
 func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
-	s.mu.Lock()
-
-	tasks := make([]Task, 0, len(s.tasks))
-
-	for _, task := range s.tasks {
-		tasks = append(tasks, task)
+	tasks, err := s.store.List()
+	if err != nil {
+		serverError(w, err)
+		return
 	}
-
-	s.mu.Unlock()
 
 	writeJSON(w, http.StatusOK, tasks)
 }
@@ -87,14 +77,15 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.mu.Lock()
-	task, exists := s.tasks[id]
-	s.mu.Unlock()
-
-	if !exists {
+	task, err := s.store.Get(id)
+	if errors.Is(err, ErrNotFound) {
 		writeJSON(w, http.StatusNotFound, map[string]string{
 			"error": "Task not found",
 		})
+		return
+	}
+	if err != nil {
+		serverError(w, err)
 		return
 	}
 
@@ -111,19 +102,15 @@ func (s *Server) deleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.mu.Lock()
-
-	_, exists := s.tasks[id]
-	if exists {
-		delete(s.tasks, id)
-	}
-
-	s.mu.Unlock()
-
-	if !exists {
+	err = s.store.Delete(id)
+	if errors.Is(err, ErrNotFound) {
 		writeJSON(w, http.StatusNotFound, map[string]string{
 			"error": "Task not found",
 		})
+		return
+	}
+	if err != nil {
+		serverError(w, err)
 		return
 	}
 

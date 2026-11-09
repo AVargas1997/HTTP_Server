@@ -1,23 +1,15 @@
 package main
 
-import (
-	"net/http"
-	"sync"
-)
+import "net/http"
 
-// Server holds the shared task storage.
+// Server holds the task store the handlers read from and write to.
 type Server struct {
-	mu     sync.Mutex
-	tasks  map[int]Task
-	nextID int
+	store TaskStore
 }
 
-// NewServer creates a server with empty task storage.
-func NewServer() *Server {
-	return &Server{
-		tasks:  make(map[int]Task),
-		nextID: 1,
-	}
+// NewServer creates a server that uses the given store.
+func NewServer(store TaskStore) *Server {
+	return &Server{store: store}
 }
 
 // routes connects each URL to its handler.

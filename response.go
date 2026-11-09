@@ -16,3 +16,12 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 		log.Println("Error writing JSON response:", err)
 	}
 }
+
+// serverError logs the real error and sends a generic 500 response,
+// so database details are never shown to the client.
+func serverError(w http.ResponseWriter, err error) {
+	log.Println("Internal error:", err)
+	writeJSON(w, http.StatusInternalServerError, map[string]string{
+		"error": "Internal server error",
+	})
+}

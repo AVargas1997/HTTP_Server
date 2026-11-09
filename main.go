@@ -1,35 +1,53 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"log"
 	"net/http"
+	"os"
+	"time"
+
+	// Registers the "pgx" PostgreSQL driver with database/sql.
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-// / setup / starting point of the program... creates task storage, connects URLs to handles and listens for requests.
+// main connects to PostgreSQL, makes sure the tasks table exists,
+// and starts the HTTP server.
 func main() {
-	///creats the server and its storage
-	server := &Server{
-		/// empty task map to start
-		tasks: make(map[int]Task),
-		// first created task ID
-		nextID: 1,
+	// The connection string comes from an environment variable so the
+	// password is never written in the code.
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		log.Fatal("DATABASE_URL is not set, for example: " +
+			"postgres://postgres:password@localhost:5432/tasks?sslmode=disable")
 	}
-	///creates rewuest router
-	mux := http.NewServeMux()
 
-	// assigns route to each handler
-	mux.HandleFunc("POST /tasks", server.createTask)
-	mux.HandleFunc("GET /tasks", server.listTasks)
-	mux.HandleFunc("GET /tasks/{id}", server.getTask)
-	mux.HandleFunc("DELETE /tasks/{id}", server.deleteTask)
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
 
-	//announce the address that is about to be used
+	// sql.Open doesn't actually connect, so ping to fail fast if the
+	// database is down or the connection string is wrong.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		log.Fatal("could not connect to database: ", err)
+	}
+
+	store := NewPostgresStore(db)
+	if err := store.Migrate(); err != nil {
+		log.Fatal("could not create tasks table: ", err)
+	}
+
+	server := NewServer(store)
+
 	log.Println("Server running at http://localhost:8080")
 
-	// listens for requests then uses mux to route them
-	//stays running while the server is serving
-	err := http.ListenAndServe("localhost:8080", mux)
-	if err != nil { //  if error is returnes , report and exit.
+	err = http.ListenAndServe("localhost:8080", server.routes())
+	if err != nil {
 		log.Fatal(err)
 	}
 }

@@ -9,7 +9,8 @@ import (
 )
 
 func TestCreateTask(t *testing.T) {
-	server := NewServer()
+	store := NewMemoryStore()
+	server := NewServer(store)
 
 	request := httptest.NewRequest(
 		http.MethodPost,
@@ -49,13 +50,14 @@ func TestCreateTask(t *testing.T) {
 		)
 	}
 
-	if _, exists := server.tasks[task.ID]; !exists {
+	if _, err := store.Get(task.ID); err != nil {
 		t.Error("expected task to be saved")
 	}
 }
 
 func TestCreateTaskEmptyTitle(t *testing.T) {
-	server := NewServer()
+	store := NewMemoryStore()
+	server := NewServer(store)
 
 	request := httptest.NewRequest(
 		http.MethodPost,
@@ -70,17 +72,15 @@ func TestCreateTaskEmptyTitle(t *testing.T) {
 		t.Fatalf("expected status 400, got %d", response.Code)
 	}
 
-	if len(server.tasks) != 0 {
+	if tasks, _ := store.List(); len(tasks) != 0 {
 		t.Error("expected no tasks to be saved")
 	}
 }
 
 func TestListTasks(t *testing.T) {
-	server := NewServer()
-	server.tasks[1] = Task{
-		ID:    1,
-		Title: "Learn Go",
-	}
+	store := NewMemoryStore()
+	server := NewServer(store)
+	store.Create("Learn Go")
 
 	request := httptest.NewRequest(http.MethodGet, "/tasks", nil)
 	response := httptest.NewRecorder()
@@ -107,11 +107,9 @@ func TestListTasks(t *testing.T) {
 }
 
 func TestGetTask(t *testing.T) {
-	server := NewServer()
-	server.tasks[1] = Task{
-		ID:    1,
-		Title: "Learn Go",
-	}
+	store := NewMemoryStore()
+	server := NewServer(store)
+	store.Create("Learn Go")
 
 	request := httptest.NewRequest(http.MethodGet, "/tasks/1", nil)
 	response := httptest.NewRecorder()
@@ -134,7 +132,8 @@ func TestGetTask(t *testing.T) {
 }
 
 func TestGetTaskNotFound(t *testing.T) {
-	server := NewServer()
+	store := NewMemoryStore()
+	server := NewServer(store)
 
 	request := httptest.NewRequest(http.MethodGet, "/tasks/99", nil)
 	response := httptest.NewRecorder()
@@ -147,11 +146,9 @@ func TestGetTaskNotFound(t *testing.T) {
 }
 
 func TestDeleteTask(t *testing.T) {
-	server := NewServer()
-	server.tasks[1] = Task{
-		ID:    1,
-		Title: "Learn Go",
-	}
+	store := NewMemoryStore()
+	server := NewServer(store)
+	store.Create("Learn Go")
 
 	request := httptest.NewRequest(http.MethodDelete, "/tasks/1", nil)
 	response := httptest.NewRecorder()
@@ -162,7 +159,7 @@ func TestDeleteTask(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", response.Code)
 	}
 
-	if _, exists := server.tasks[1]; exists {
+	if _, err := store.Get(1); err != ErrNotFound {
 		t.Error("expected task to be deleted")
 	}
 }
